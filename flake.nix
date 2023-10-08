@@ -14,7 +14,9 @@
             (python311.withPackages (p: with p; [
               jax
               equinox
+              matplotlib
 
+              # development tools
               python-lsp-server
               python-lsp-ruff
               python-lsp-black
