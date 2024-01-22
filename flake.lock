@@ -55,16 +55,16 @@
     "pyedifice": {
       "flake": false,
       "locked": {
-        "lastModified": 1702913980,
-        "narHash": "sha256-TXN9UMzoS/Fto3RzR5pU0C5QeS2/u+cznrCJJwltPf0=",
+        "lastModified": 1705893465,
+        "narHash": "sha256-thUyn35ad1FTBiD1VA7k2jRRkk5Co+2nK8sTHZ2RJfs=",
         "owner": "pyedifice",
         "repo": "pyedifice",
-        "rev": "858349cf1260516fb36482ac9d83d1f88f2d1ed5",
+        "rev": "f5a7c051a02d6a24ee1b51bdec264f8e0e6be5c7",
         "type": "github"
       },
       "original": {
         "owner": "pyedifice",
-        "ref": "v0.3.0",
+        "ref": "v0.3.2",
         "repo": "pyedifice",
         "type": "github"
       }

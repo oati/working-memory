@@ -3,7 +3,8 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     pyedifice = {
-      url = "github:pyedifice/pyedifice/v0.3.0";
+      url = "github:pyedifice/pyedifice/v0.3.2";
+      # url = "github:pyedifice/pyedifice/a4558f4f95a18f5b0ee7a9a20d2c661166e50139";
       flake = false;
     };
   };
@@ -36,6 +37,7 @@
               matplotlib
               pyqtgraph
               (p.callPackage pyedifice {})
+              watchdog
 
               # LSP tools
               python-lsp-server
