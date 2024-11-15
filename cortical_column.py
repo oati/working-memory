@@ -92,7 +92,7 @@ class CorticalColumn(eqx.Module):
         long_range_inhibitory_input: jax.Array,
         excitatory_input: jax.Array,
         inhibitory_input: jax.Array,
-        key: jax.random.KeyArray,
+        key: jax.Array,
         layer_wm: bool = False,
     ) -> CorticalColumnState:
         (p_state, e_state, s_state, f_state, l_state, _) = state

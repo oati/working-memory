@@ -50,7 +50,7 @@ def filter_data(params, state):
 
 
 def model_data(*args):
-    return jax.tree_map(
+    return jax.tree.map(
         lambda *x: jnp.stack(x, axis=-1),
         *(filter_data(params, state) for params, state in simulate_model(*args))
     )

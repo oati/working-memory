@@ -196,7 +196,7 @@ class Model(eqx.Module):
         state: ModelState,
         input: jax.Array,
         mask: jax.Array,
-        key: jax.random.KeyArray,
+        key: jax.Array,
     ) -> tuple[ModelParameters, ModelState]:
         wm_state, l1_state, l2_state, l3_state = state
         y_wm, y_l1, y_l2, y_l3 = [layer.pyramidal_synapse.psp for layer in state]
