@@ -1,7 +1,7 @@
 import equinox as eqx  # type: ignore[import]
 import jax
 import jax.numpy as jnp
-from synapse import Synapse, SynapseState
+from .synapse import Synapse, SynapseState
 from typing import NamedTuple
 
 

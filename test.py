@@ -8,9 +8,9 @@ from model import (
     ModelState,
     TrainingHyperparameters,
 )
-from cortical_column import CorticalColumn, CorticalColumnHyperparameters
-from synapse import Synapse
-from hyperparameters import (
+from model.cortical_column import CorticalColumn, CorticalColumnHyperparameters
+from model.synapse import Synapse
+from model.hyperparameters import (
     dt,
     cortical_column_hyperparameters,
     sequence_model_hyperparameters,

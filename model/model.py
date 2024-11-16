@@ -1,7 +1,7 @@
 import equinox as eqx  # type: ignore[import]
 import jax
 import jax.numpy as jnp
-from cortical_column import (
+from .cortical_column import (
     CorticalColumn,
     CorticalColumnState,
     CorticalColumnHyperparameters,

@@ -1,9 +1,9 @@
 import jax.numpy as jnp
-from model import (
+from .model import (
     ModelHyperparameters,
     TrainingHyperparameters,
 )
-from cortical_column import CorticalColumnHyperparameters
+from .cortical_column import CorticalColumnHyperparameters
 
 
 dt = 1e-4
