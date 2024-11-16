@@ -46,28 +46,10 @@
         "url": "https://github.com/NixOS/nixpkgs/archive/cc2f28000298e1269cea6612cd06ec9979dd5d7f.tar.gz"
       }
     },
-    "pyedifice": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1705893465,
-        "narHash": "sha256-thUyn35ad1FTBiD1VA7k2jRRkk5Co+2nK8sTHZ2RJfs=",
-        "owner": "pyedifice",
-        "repo": "pyedifice",
-        "rev": "f5a7c051a02d6a24ee1b51bdec264f8e0e6be5c7",
-        "type": "github"
-      },
-      "original": {
-        "owner": "pyedifice",
-        "ref": "v0.3.2",
-        "repo": "pyedifice",
-        "type": "github"
-      }
-    },
     "root": {
       "inputs": {
         "flake-parts": "flake-parts",
-        "nixpkgs": "nixpkgs",
-        "pyedifice": "pyedifice"
+        "nixpkgs": "nixpkgs"
       }
     }
   },
