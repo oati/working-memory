@@ -11,7 +11,7 @@
       perSystem = { pkgs, ... }: {
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
-            (python311.withPackages (p: with p; [
+            (python312.withPackages (p: with p; [
               jax
               equinox
               matplotlib
