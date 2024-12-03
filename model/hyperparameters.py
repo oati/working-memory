@@ -1,8 +1,6 @@
 import jax.numpy as jnp
-from .model import (
-    ModelHyperparameters,
-    TrainingHyperparameters,
-)
+from .model import ModelHyperparameters
+from .training import TrainingHyperparameters
 from .cortical_column import CorticalColumnHyperparameters
 
 
@@ -41,6 +39,7 @@ semantic_model_hyperparameters = ModelHyperparameters(
 )
 
 training_hyperparameters = TrainingHyperparameters(
+    e0=5,
     theta_low1=0.12,
     theta_low2=0.8,
     theta_high2=0.6,
@@ -57,6 +56,7 @@ training_hyperparameters = TrainingHyperparameters(
     w_l2_l3_max=11,
     w_max_sum=130,
     k_max_sum=160,
+    a_max_sum=None,
 )
 
 training_mask_1 = jnp.array([[0, 0], [1, 0], [1, 1], [1, 1]])

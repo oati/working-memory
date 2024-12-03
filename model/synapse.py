@@ -1,33 +1,44 @@
 import jax
 import jax.numpy as jnp
 import equinox as eqx  # type: ignore[import]
-from typing import NamedTuple
-
-
-class SynapseState(NamedTuple):
-    # post-synaptic potential
-    psp: jax.Array
-    # derivative of psp with respect to time
-    psp_prime: jax.Array
+from functools import partial
 
 
 class Synapse(eqx.Module):
-    dt: float
+    """Model of a synapse.
+
+    The synapse state keeps track of
+    0: post-synaptic potential
+    1: derivative of psp with respect to time
+
+    The synapse state is expected to have shape (2,) or (2, N)
+    """
+
     gain: float
     time_constant: float
-
-    def __init__(self, gain: float, time_constant: float, dt: float):
-        self.dt = dt
-        self.gain = gain
-        self.time_constant = time_constant
+    dt: float
 
     @staticmethod
-    def init_state(like: jax.Array) -> SynapseState:
-        s = jnp.zeros_like(like)
-        return SynapseState(s, s)
+    def init_state(like: jax.Array) -> jax.Array:
+        return jnp.array(2 * [jnp.zeros_like(like)])
 
-    @eqx.filter_jit
-    def __call__(self, state: SynapseState, input: jax.Array) -> SynapseState:
+    @partial(jax.jit, static_argnames=["self"])
+    def __call__(
+        self,
+        state: jax.Array,
+        input: jax.Array,
+    ) -> jax.Array:
+        """Simulate one timestep of the model.
+
+        state: [psp, psp_prime]; shape (2,) or (2, N)
+        - psp: post-synaptic potential
+        - psp_prime: derivative of psp with respect to time
+
+        input: presynaptic spike density; shape () or (N)
+
+        returns updated state
+        """
+
         psp, psp_prime = state
 
         psp_double_prime = (
@@ -38,6 +49,6 @@ class Synapse(eqx.Module):
 
         psp_prime += psp_double_prime * self.dt
         psp += psp_prime * self.dt
-        new_state = SynapseState(psp, psp_prime)
+        new_state = jnp.array([psp, psp_prime])
 
         return new_state
