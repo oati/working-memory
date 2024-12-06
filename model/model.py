@@ -6,7 +6,7 @@ from .cortical_column import (
     CorticalColumn,
     CorticalColumnHyperparameters,
 )
-from typing import NamedTuple
+from typing import NamedTuple, Callable
 
 
 class ModelParameters(NamedTuple):
@@ -96,7 +96,7 @@ class Model(eqx.Module):
         """
 
         # determine cortical columns depending on the wm_reset signal
-        cortical_columns = [
+        cortical_columns: list[Callable] = [
             partial(
                 jax.lax.cond,
                 wm_reset,
@@ -107,7 +107,7 @@ class Model(eqx.Module):
             self.cortical_column,
             self.cortical_column,
         ]
-        get_pyramidal_firing_rates = [
+        get_pyramidal_firing_rates: list[Callable] = [
             partial(
                 jax.lax.cond,
                 wm_reset,
