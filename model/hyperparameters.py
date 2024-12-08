@@ -8,15 +8,15 @@ dt = 1e-4
 
 
 cortical_column_hyperparameters = CorticalColumnHyperparameters(
-    e0=5,
+    e0=2.5,  # error in the original paper
     r=0.7,
     s0=10,
     excitatory_gain=5.17,
-    excitatory_time_constant=7.7,
+    excitatory_time_constant=7.7e-3,
     slow_inhibitory_gain=4.45,
-    slow_inhibitory_time_constant=34,
+    slow_inhibitory_time_constant=34e-3,
     fast_inhibitory_gain=57.1,
-    fast_inhibitory_time_constant=6.8,
+    fast_inhibitory_time_constant=6.8e-3,
     c_ep=31.7,
     c_pe=17.3,
     c_sp=51.9,
@@ -26,8 +26,8 @@ cortical_column_hyperparameters = CorticalColumnHyperparameters(
     c_fs=100,
     c_pf=16,
     c_ff=18,
-    var_p=5,
-    var_f=5,
+    var_p=5e4,  # error in the original paper
+    var_f=5e4,  # error in the original paper
 )
 
 sequence_model_hyperparameters = ModelHyperparameters(

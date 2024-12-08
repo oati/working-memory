@@ -15,12 +15,19 @@
               jax
               equinox
               matplotlib
+              tqdm
 
               # LSP tools
               python-lsp-server
               python-lsp-ruff
               python-lsp-black
               pylsp-mypy
+
+              # jupyterlab
+              jupyterlab
+              jupyterlab-lsp
+              # jupyterlab-execute-time
+              # jupyterlab-widgets
             ]))
           ];
         };

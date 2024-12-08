@@ -75,31 +75,26 @@ class CorticalColumn(eqx.Module):
             [hparams.c_ep, 0, 0, 0, 0, 0],
             [hparams.c_sp, 0, 0, 0, 0, 0],
             [hparams.c_fp, 0, -hparams.c_fs, -hparams.c_ff, 0, 1],
-            [0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0],
         ]
 
-        excitatory_synapse_hparams = (
-            hparams.excitatory_gain,
-            hparams.excitatory_time_constant,
+        # initialize Synapses
+        excitatory_synapse = Synapse(
+            hparams.excitatory_gain, hparams.excitatory_time_constant, dt
         )
-        slow_inhibitory_synapse_hparams = (
-            hparams.slow_inhibitory_gain,
-            hparams.slow_inhibitory_time_constant,
+        slow_inhibitory_synapse = Synapse(
+            hparams.slow_inhibitory_gain, hparams.slow_inhibitory_time_constant, dt
         )
-        fast_inhibitory_synapse_hparams = (
-            hparams.fast_inhibitory_gain,
-            hparams.fast_inhibitory_time_constant,
+        fast_inhibitory_synapse = Synapse(
+            hparams.fast_inhibitory_gain, hparams.fast_inhibitory_time_constant, dt
         )
 
-        # initialize Synapses
         self.synapses = [
-            Synapse(*excitatory_synapse_hparams, dt),
-            Synapse(*excitatory_synapse_hparams, dt),
-            Synapse(*slow_inhibitory_synapse_hparams, dt),
-            Synapse(*fast_inhibitory_synapse_hparams, dt),
-            Synapse(*excitatory_synapse_hparams, dt),
-            Synapse(*excitatory_synapse_hparams, dt),
+            excitatory_synapse,
+            excitatory_synapse,
+            slow_inhibitory_synapse,
+            fast_inhibitory_synapse,
+            excitatory_synapse,
+            excitatory_synapse,
         ]
 
     @staticmethod
@@ -128,38 +123,50 @@ class CorticalColumn(eqx.Module):
         """
 
         # apply random noise to the inputs
-        p_key, f_key = jax.random.split(key)
+        key1, key2 = jax.random.split(key)
         excitatory_input += (
-            jax.random.normal(p_key, excitatory_input.shape) * self.hparams.var_p**0.5
+            jax.random.normal(key1, excitatory_input.shape) * self.hparams.var_p**0.5
         )
         inhibitory_input += (
-            jax.random.normal(f_key, inhibitory_input.shape) * self.hparams.var_f**0.5
+            jax.random.normal(key2, inhibitory_input.shape) * self.hparams.var_f**0.5
         )
 
         # get post-synaptic potentials
         psp = state[:, 0]
 
-        # calculate firing rates
-        # this is analogous to a vectorized matrix-vector multiplication
+        # calculate membrane potentials
+        # this is analogous to a matrix-vector multiplication
         # along psp's axes 0 (synapse types)
         membrane_potentials = jnp.tensordot(
             jnp.array(self.connectivity_matrix), psp, axes=(1, 0)
         )
 
-        # apply inputs
+        # apply long range inputs
+        zeros = jnp.zeros_like(excitatory_input)
         membrane_potentials += jnp.array(
             [
                 long_range_excitatory_input,
-                jnp.zeros_like(excitatory_input),
-                jnp.zeros_like(excitatory_input),
+                zeros,
+                zeros,
                 long_range_inhibitory_input,
-                excitatory_input,
-                inhibitory_input,
             ]
         )
 
         # calculate firing rates
         firing_rates = self.activation_function(membrane_potentials)
+
+        # concatenate input firing rates
+        firing_rates = jnp.concat(
+            (
+                firing_rates,
+                jnp.array(
+                    [
+                        excitatory_input,
+                        inhibitory_input,
+                    ]
+                ),
+            )
+        )
 
         # simulate synapses
         new_state = jnp.array(
@@ -178,7 +185,7 @@ class CorticalColumn(eqx.Module):
     def get_pyramidal_firing_rate(
         self, state: jax.Array, long_range_excitatory_input: jax.Array
     ) -> jax.Array:
-        """Compute pyramidal firing rates. This function is needed for type A synapses."""
+        """Compute pyramidal firing rates. This function is used by type A synapses."""
         psp = state[:, 0]
         pyramidal_membrane_potential = jnp.tensordot(
             jnp.array(self.connectivity_matrix[0]), psp, axes=(0, 0)

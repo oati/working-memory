@@ -25,7 +25,7 @@ def simulate_model(model, state, params, steps, dt, key):
         yield pfr
 
 if __name__ == "__main__":
-    key = jax.random.PRNGKey(0)
+    key = jax.random.key(0)
     model = Model(
         cortical_column_hyperparameters,
         semantic_model_hyperparameters,
