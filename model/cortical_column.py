@@ -25,7 +25,7 @@ class CorticalColumnHyperparameters(NamedTuple):
     c_pe: float
     c_sp: float
     c_ps: float
-    c_pp: float  # this value changes depending on the layer and model phase
+    c_pp: float
     c_fp: float
     c_fs: float
     c_pf: float
@@ -98,8 +98,23 @@ class CorticalColumn(eqx.Module):
         ]
 
     @staticmethod
-    def init_state(like: jax.Array) -> jax.Array:
-        return jnp.array(6 * [Synapse.init_state(like)])
+    def init_state(shape: tuple[int, ...]) -> jax.Array:
+        return jnp.array(6 * [Synapse.init_state(shape)])
+
+    @partial(jax.jit, static_argnames=["self"])
+    def add_input_noise(
+        self, key: jax.Array, excitatory_input: jax.Array, inhibitory_input: jax.Array
+    ) -> tuple[jax.Array, jax.Array]:
+        """Apply random noise to inputs."""
+        key1, key2 = jax.random.split(key)
+        excitatory_input += (
+            jax.random.normal(key1, excitatory_input.shape) * self.hparams.var_p**0.5
+        )
+        inhibitory_input += (
+            jax.random.normal(key2, inhibitory_input.shape) * self.hparams.var_f**0.5
+        )
+
+        return excitatory_input, inhibitory_input
 
     @partial(jax.jit, static_argnames=["self"])
     def __call__(
@@ -109,28 +124,17 @@ class CorticalColumn(eqx.Module):
         long_range_inhibitory_input: jax.Array,
         excitatory_input: jax.Array,
         inhibitory_input: jax.Array,
-        key: jax.Array,
-    ) -> tuple[jax.Array, jax.Array]:
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
         """Simulate one timestep of the model.
 
         state: stacked synapse states of the 6 synapses; shape (6, 2) or (6, 2, N)
         inputs: inputs to the cortical column; shape () or (N,)
         key: PRNG key
 
-        returns (updated state, pyramidal firing rate)
+        returns (updated state, pyramidal firing rate, fast inhibitory firing rate)
 
-        the shape of pyramidal firing rate is () or (N,)
+        the shape of firing rate is () or (N,)
         """
-
-        # apply random noise to the inputs
-        key1, key2 = jax.random.split(key)
-        excitatory_input += (
-            jax.random.normal(key1, excitatory_input.shape) * self.hparams.var_p**0.5
-        )
-        inhibitory_input += (
-            jax.random.normal(key2, inhibitory_input.shape) * self.hparams.var_f**0.5
-        )
-
         # get post-synaptic potentials
         psp = state[:, 0]
 
@@ -156,17 +160,13 @@ class CorticalColumn(eqx.Module):
         firing_rates = self.activation_function(membrane_potentials)
 
         # concatenate input firing rates
-        firing_rates = jnp.concat(
-            (
-                firing_rates,
-                jnp.array(
-                    [
-                        excitatory_input,
-                        inhibitory_input,
-                    ]
-                ),
-            )
+        input_synapse_firing_rate = jnp.array(
+            [
+                excitatory_input,
+                inhibitory_input,
+            ]
         )
+        firing_rates = jnp.concat([firing_rates, input_synapse_firing_rate])
 
         # simulate synapses
         new_state = jnp.array(
@@ -176,10 +176,11 @@ class CorticalColumn(eqx.Module):
             ]
         )
 
-        # extract pyramidal firing rate
+        # extract pyramidal and fast inhibitory firing rates
         pyramidal_firing_rate = firing_rates[0]
+        fast_inhibitory_firing_rate = firing_rates[3]
 
-        return new_state, pyramidal_firing_rate
+        return new_state, pyramidal_firing_rate, fast_inhibitory_firing_rate
 
     @partial(jax.jit, static_argnames=["self"])
     def get_pyramidal_firing_rate(
@@ -187,8 +188,9 @@ class CorticalColumn(eqx.Module):
     ) -> jax.Array:
         """Compute pyramidal firing rates. This function is used by type A synapses."""
         psp = state[:, 0]
-        pyramidal_membrane_potential = jnp.tensordot(
-            jnp.array(self.connectivity_matrix[0]), psp, axes=(0, 0)
+        pyramidal_membrane_potential = (
+            jnp.tensordot(jnp.array(self.connectivity_matrix[0]), psp, axes=(0, 0))
+            + long_range_excitatory_input
         )
         pyramidal_firing_rate = self.activation_function(pyramidal_membrane_potential)
         return pyramidal_firing_rate

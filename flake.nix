@@ -26,8 +26,8 @@
               # jupyterlab
               jupyterlab
               jupyterlab-lsp
-              # jupyterlab-execute-time
               # jupyterlab-widgets
+              # jupyterlab-execute-time
             ]))
           ];
         };

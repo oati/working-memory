@@ -37,7 +37,6 @@ class UpdateRule(eqx.Module):
     weights_max: float
     max_sum: Optional[float]
     hebbian: bool
-    normalization: bool
 
     @partial(jax.jit, static_argnames=["self"])
     def __call__(
@@ -48,29 +47,33 @@ class UpdateRule(eqx.Module):
     ) -> jax.Array:
         """Update weights based on firing rates."""
         # hebbian / anti-hebbian rule
-        v = jax.nn.relu(target_firing_rates / (2 * self.e0) - self.theta_low)
-        w = jax.lax.select(
-            self.hebbian,
-            jax.nn.relu(self.theta_high - source_firing_rates / (2 * self.e0)),
-            jax.nn.relu(source_firing_rates / (2 * self.e0) - self.theta_low),
+        v = (
+            jax.nn.relu(target_firing_rates / (2 * self.e0) - self.theta_low)
+            if self.hebbian
+            else jax.nn.relu(self.theta_high - target_firing_rates / (2 * self.e0))
         )
+        w = jax.nn.relu(source_firing_rates / (2 * self.e0) - self.theta_low)
 
         delta_weights = self.gamma * jnp.outer(v, w) * (self.weights_max - weights)
+        # set diagonal updates to zero
+        delta_weights = jnp.fill_diagonal(delta_weights, 0, inplace=False)
         weights += delta_weights
 
-        # normalization to maximum
-        if self.normalization:
-            # get sum of weights for each row
-            sum_weights = jnp.sum(weights, axis=1, keepdims=True)
+        return weights
 
-            # if max_sum is undefined, then use min(sum_weights)
-            max_sum = sum_weights.min() if self.max_sum is None else self.max_sum
+    @partial(jax.jit, static_argnames=["self"])
+    def normalize(self, weights: jax.Array) -> jax.Array:
+        """Normalize weights to a maximum."""
+        # get sum of weights for each row
+        sum_weights = jnp.sum(weights, axis=1, keepdims=True)
 
-            # apply normalization
-            weights = jnp.where(
-                sum_weights > max_sum, weights * max_sum / sum_weights, weights
-            )
+        # if max_sum is undefined, then use min(sum_weights)
+        max_sum = sum_weights.min() if self.max_sum is None else self.max_sum
 
+        # apply normalization
+        weights = jnp.where(
+            sum_weights > max_sum, weights * max_sum / sum_weights, weights
+        )
         return weights
 
 
@@ -94,7 +97,6 @@ class Trainer(eqx.Module):
             synapse_type: Literal["W", "K", "A"],
             source_layer: int,
             weights_max: float,
-            normalization: bool = True,
         ) -> UpdateRule:
             e0 = hparams.e0
             gamma, max_sum, hebbian = {
@@ -116,29 +118,33 @@ class Trainer(eqx.Module):
                 weights_max,
                 max_sum,
                 hebbian,
-                normalization,
             )
 
+        # initialize UpdateRules
         self.update_w_l1_l1 = update_rule("W", 1, hparams.w_l1_l1_max)
         self.update_k_l2_l2 = update_rule("K", 2, hparams.k_l2_l2_max)
         self.update_a_l2_l2 = update_rule("A", 2, hparams.a_l2_l2_max)
         self.update_k_l3_l3 = update_rule("K", 3, hparams.k_l3_l3_max)
         self.update_a_l3_l3 = update_rule("A", 3, hparams.a_l3_l3_max)
-        self.update_w_l2_l3 = update_rule("W", 3, hparams.w_l2_l3_max, False)
+        self.update_w_l2_l3 = update_rule("W", 3, hparams.w_l2_l3_max)
 
     @partial(jax.jit, static_argnames=["self"])
     def step1(
-        self, params: ModelParameters, firing_rates: jax.Array
+        self,
+        params: ModelParameters,
+        pyramidal_firing_rates: jax.Array,
+        fast_inhibitory_firing_rates: jax.Array,
     ) -> ModelParameters:
-        """Applys the update rule for step 1 of training."""
+        """Apply the update rule for step 1 of training."""
         w_l1_l1, k_l2_l2, a_l2_l2, k_l3_l3, a_l3_l3, w_l2_l3 = params
-        _, l1, l2, l3 = firing_rates
+        _, p1, p2, p3 = pyramidal_firing_rates
+        _, _, f2, f3 = fast_inhibitory_firing_rates
 
-        new_w_l1_l1 = self.update_w_l1_l1(w_l1_l1, l1, l1)
-        new_k_l2_l2 = self.update_k_l2_l2(k_l2_l2, l2, l2)
-        new_a_l2_l2 = self.update_a_l2_l2(a_l2_l2, l2, l2)
-        new_k_l3_l3 = self.update_k_l3_l3(k_l3_l3, l3, l3)
-        new_a_l3_l3 = self.update_a_l3_l3(a_l3_l3, l3, l3)
+        new_w_l1_l1 = self.update_w_l1_l1(w_l1_l1, p1, p1)
+        new_k_l2_l2 = self.update_k_l2_l2(k_l2_l2, f2, p2)
+        new_a_l2_l2 = self.update_a_l2_l2(a_l2_l2, f2, p2)
+        new_k_l3_l3 = self.update_k_l3_l3(k_l3_l3, f3, p3)
+        new_a_l3_l3 = self.update_a_l3_l3(a_l3_l3, f3, p3)
 
         new_params = ModelParameters(
             new_w_l1_l1,
@@ -155,7 +161,7 @@ class Trainer(eqx.Module):
     def step2(
         self, params: ModelParameters, firing_rates: jax.Array
     ) -> ModelParameters:
-        """Applys the update rule for step 2 of training.
+        """Apply the update rule for step 2 of training.
         This step is only used in the "sequence-ordering working memory" modality.
         """
         w_l2_l3 = params.w_l2_l3
@@ -164,5 +170,27 @@ class Trainer(eqx.Module):
         new_w_l2_l3 = self.update_w_l2_l3(w_l2_l3, l2, l3)
 
         new_params = params._replace(w_l2_l3=new_w_l2_l3)
+
+        return new_params
+
+    @partial(jax.jit, static_argnames=["self"])
+    def normalize(self, params: ModelParameters) -> ModelParameters:
+        """Apply normalization for step 1 of training."""
+        w_l1_l1, k_l2_l2, a_l2_l2, k_l3_l3, a_l3_l3, w_l2_l3 = params
+
+        new_w_l1_l1 = self.update_w_l1_l1.normalize(w_l1_l1)
+        new_k_l2_l2 = self.update_k_l2_l2.normalize(k_l2_l2)
+        new_a_l2_l2 = self.update_a_l2_l2.normalize(a_l2_l2)
+        new_k_l3_l3 = self.update_k_l3_l3.normalize(k_l3_l3)
+        new_a_l3_l3 = self.update_a_l3_l3.normalize(a_l3_l3)
+
+        new_params = ModelParameters(
+            new_w_l1_l1,
+            new_k_l2_l2,
+            new_a_l2_l2,
+            new_k_l3_l3,
+            new_a_l3_l3,
+            w_l2_l3,
+        )
 
         return new_params

@@ -6,7 +6,7 @@ from .cortical_column import (
     CorticalColumn,
     CorticalColumnHyperparameters,
 )
-from typing import NamedTuple, Callable
+from typing import NamedTuple
 
 
 class ModelParameters(NamedTuple):
@@ -19,6 +19,7 @@ class ModelParameters(NamedTuple):
 
 
 class ModelHyperparameters(NamedTuple):
+    w_wm_wm: float  # C_pp in the paper, only active during maintenance period
     w_l1_wm: float
     w_wm_l1: float
     w_l2_l1: float
@@ -42,7 +43,6 @@ class Model(eqx.Module):
 
     hparams: ModelHyperparameters
     cortical_column: CorticalColumn
-    wm_maintenance_cortical_column: CorticalColumn
 
     def __init__(
         self,
@@ -52,25 +52,25 @@ class Model(eqx.Module):
     ):
         self.hparams = hparams
 
-        # initialize CorticalColumns to be vectorized
-        self.cortical_column = CorticalColumn(
-            cortical_column_hparams._replace(c_pp=0), dt
-        )
-        self.wm_maintenance_cortical_column = CorticalColumn(
-            cortical_column_hparams, dt
-        )
+        # initialize CorticalColumns
+        self.cortical_column = CorticalColumn(cortical_column_hparams, dt)
 
-    def init_params(self, like: jax.Array) -> ModelParameters:
+    @staticmethod
+    def init_params(shape: tuple[int, ...]) -> ModelParameters:
         """Initialize parameters based on the number of features in an input pattern."""
-        n = jnp.size(like)
+        n = shape[0]
         m = jnp.zeros((n, n))
         return ModelParameters(*6 * [m])
 
-    def init_state(self, like: jax.Array) -> jax.Array:
+    @staticmethod
+    def init_state(shape: tuple[int, ...]) -> jax.Array:
         """Initialize the model state based on the number of features in an input pattern."""
-
-        s = CorticalColumn.init_state(like)
+        s = CorticalColumn.init_state(shape)
         return jnp.array(4 * [s])
+
+    @partial(jax.jit, static_argnames=["self"])
+    def add_input_noise(self, *args, **kwargs):
+        return self.cortical_column.add_input_noise(*args, **kwargs)
 
     @partial(jax.jit, static_argnames=["self"])
     def __call__(
@@ -79,53 +79,30 @@ class Model(eqx.Module):
         params: ModelParameters,
         excitatory_inputs: jax.Array,
         inhibitory_inputs: jax.Array,
-        key: jax.Array,
-        wm_reset: bool = False,
-    ) -> tuple[jax.Array, jax.Array]:
+        wm_maintenance: jax.Array,
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
         """Simulate one timestep of the model.
 
         params: trained parameters of the model
         state: stacked cortical column states of the 4 layers; shape (4, 6, 2, N)
         inputs: inputs to the model; shape (4, N)
-        key: PRNG key
-        wm_reset: working memory reset signal
+        wm_maintenance: working memory maintenance signal,
+                        wm layer auto-excitation signal; shape (N)
 
-        returns (updated state, pyramidal firing rates)
+        returns (updated state, pyramidal firing rates, fast inhibitory firing rates)
 
-        the shape of pyramidal firing rates is (4, N)
+        the shape of the firing rates is (4, N)
         """
 
-        # determine cortical columns depending on the wm_reset signal
-        cortical_columns: list[Callable] = [
-            partial(
-                jax.lax.cond,
-                wm_reset,
-                self.cortical_column,
-                self.wm_maintenance_cortical_column,
-            ),
-            self.cortical_column,
-            self.cortical_column,
-            self.cortical_column,
-        ]
-        get_pyramidal_firing_rates: list[Callable] = [
-            partial(
-                jax.lax.cond,
-                wm_reset,
-                self.cortical_column.get_pyramidal_firing_rate,
-                self.wm_maintenance_cortical_column.get_pyramidal_firing_rate,
-            ),
-            self.cortical_column.get_pyramidal_firing_rate,
-            self.cortical_column.get_pyramidal_firing_rate,
-            self.cortical_column.get_pyramidal_firing_rate,
-        ]
-
-        # get post-synaptic potentials of pyramidal neurons
+        # get pyramidal post-synaptic potentials
         ppsp = state[:, 0, 0]
 
+        # determine layer wm auto-excitation based on wm_maintenance signal
+        wm_auto_excitation = wm_maintenance * self.hparams.w_wm_wm * ppsp[0]
         # compute long range excitatory inputs
         long_range_excitatory_inputs = jnp.array(
             [
-                self.hparams.w_wm_l1 * ppsp[1],
+                wm_auto_excitation + self.hparams.w_wm_l1 * ppsp[1],
                 self.hparams.w_l1_wm * ppsp[0] + params.w_l1_l1 @ ppsp[1],
                 self.hparams.w_l2_l1 * ppsp[1] + params.w_l2_l3 @ ppsp[3],
                 self.hparams.w_l3_l2 * ppsp[2],
@@ -133,13 +110,8 @@ class Model(eqx.Module):
         )
 
         # compute pyramidal firing rates
-        pfr = jnp.array(
-            [
-                get_pyramidal_firing_rate(*args)
-                for get_pyramidal_firing_rate, *args in zip(
-                    get_pyramidal_firing_rates, state, long_range_excitatory_inputs
-                )
-            ]
+        pfr = jax.vmap(self.cortical_column.get_pyramidal_firing_rate)(
+            state, long_range_excitatory_inputs
         )
 
         # compute long range inhibitory inputs
@@ -154,20 +126,12 @@ class Model(eqx.Module):
         )
 
         # simulate cortical columns
-        keys = jax.random.split(key, 4)
-        new_state = jnp.array(
-            [
-                cortical_column(*args)[0]
-                for cortical_column, *args in zip(
-                    cortical_columns,
-                    state,
-                    long_range_excitatory_inputs,
-                    long_range_inhibitory_inputs,
-                    excitatory_inputs,
-                    inhibitory_inputs,
-                    keys,
-                )
-            ]
+        new_state, _, fifr = jax.vmap(self.cortical_column)(
+            state,
+            long_range_excitatory_inputs,
+            long_range_inhibitory_inputs,
+            excitatory_inputs,
+            inhibitory_inputs,
         )
 
-        return new_state, pfr
+        return new_state, pfr, fifr

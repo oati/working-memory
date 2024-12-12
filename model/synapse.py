@@ -19,8 +19,8 @@ class Synapse(eqx.Module):
     dt: float
 
     @staticmethod
-    def init_state(like: jax.Array) -> jax.Array:
-        return jnp.array(2 * [jnp.zeros_like(like)])
+    def init_state(shape: tuple[int, ...]) -> jax.Array:
+        return jnp.array(2 * [jnp.zeros(shape)])
 
     @partial(jax.jit, static_argnames=["self"])
     def __call__(
