@@ -26,9 +26,11 @@
               # jupyterlab
               jupyterlab
               jupyterlab-lsp
+              ipywidgets
               # jupyterlab-widgets
               # jupyterlab-execute-time
             ]))
+            ffmpeg
           ];
         };
       };
