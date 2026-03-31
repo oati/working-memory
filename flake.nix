@@ -16,7 +16,7 @@
       lib.mapAttrs (system: pkgs: {
         default = pkgs.mkShell {
           packages = with pkgs; [
-            (python312.withPackages (p:
+            (python314.withPackages (p:
               with p; [
                 jax
                 equinox
