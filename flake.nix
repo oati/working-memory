@@ -1,38 +1,45 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    flake-parts.url = "github:hercules-ci/flake-parts";
   };
 
-  outputs = inputs@{ flake-parts, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
-      systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+  outputs = inputs: let
+    inherit (inputs.nixpkgs) lib;
 
-      perSystem = { pkgs, ... }: {
-        devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            (python312.withPackages (p: with p; [
-              jax
-              equinox
-              matplotlib
-              tqdm
+    eachSystem = lib.genAttrs lib.systems.flakeExposed;
+    pkgsFor = eachSystem (
+      system:
+        import inputs.nixpkgs {localSystem.system = system;}
+    );
+  in {
+    devShells =
+      lib.mapAttrs (system: pkgs: {
+        default = pkgs.mkShell {
+          packages = with pkgs; [
+            (python312.withPackages (p:
+              with p; [
+                jax
+                equinox
+                matplotlib
+                tqdm
 
-              # LSP tools
-              python-lsp-server
-              python-lsp-ruff
-              python-lsp-black
-              pylsp-mypy
+                # LSP tools
+                python-lsp-server
+                python-lsp-ruff
+                python-lsp-black
+                pylsp-mypy
 
-              # jupyterlab
-              jupyterlab
-              jupyterlab-lsp
-              ipywidgets
-              # jupyterlab-widgets
-              # jupyterlab-execute-time
-            ]))
+                # jupyterlab
+                jupyterlab
+                jupyterlab-lsp
+                ipywidgets
+                # jupyterlab-widgets
+                # jupyterlab-execute-time
+              ]))
             ffmpeg
           ];
         };
-      };
-    };
+      })
+      pkgsFor;
+  };
 }
